@@ -36,6 +36,7 @@ elements: expr (COMMA expr)*;
 
 // Expresion with precedens and unary '-'
 expr:
+
         <assoc = right> '(' arguments? ')' ARROW expr                         # LambdaParams
         | <assoc = right> ID (COLON type)? ARROW expr           # Lambda
         | expr COLON type                                                                                       # Cast
