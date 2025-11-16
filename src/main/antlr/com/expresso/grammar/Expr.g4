@@ -58,6 +58,8 @@ expr:
         | STRING                                                # String
         | NONE                                                  # None
         | ID                                                    # Variable
+        // Grouped expressions intentionally reuse pureExpr so typed lambdas outrank casts while
+        // ParensContext still exposes ctx.expr() to the visitors via the labeled element.
         | '(' expr=pureExpr ')'                                  # Parens
         | LBRACK elements? RBRACK               # Lists;
 
