@@ -182,7 +182,12 @@ public class AstBuilder extends ExprBaseVisitor<Node> {
 
     @Override
     public Node visitParens(ExprParser.ParensContext ctx) {
-        return visit(ctx.expr()); // Parentheses disappear in AST
+        // The Parens production wraps a "pureExpr" rule. In older grammar
+        // versions it exposed "expr" directly, but the current one only stores
+        // the inner tree as the second child. Visiting that child keeps the AST
+        // construction independent from the grammar detail and works for both
+        // versions (since child index 1 is always the enclosed expression).
+        return visit(ctx.getChild(1));
     }
 
     @Override
