@@ -183,7 +183,99 @@ public class AstBuilder extends ExprBaseVisitor<Node> {
 
     @Override
     public Node visitParens(ExprParser.ParensContext ctx) {
-        return visit(ctx.expr()); // Parentheses disappear in AST
+        return visit(ctx.inner); // Parentheses disappear in AST
+    }
+
+    @Override
+    public Node visitPureExpr(ExprParser.PureExprContext ctx) {
+        if (ctx == null) {
+            return null;
+        }
+
+        List<ExprParser.ExprContext> exprChildren = ctx.expr() == null ? List.of() : ctx.expr();
+
+        if (ctx.ARROW() != null && !exprChildren.isEmpty()) {
+            if (ctx.arguments() != null || ctx.getChildCount() > 0 && "(".equals(ctx.getChild(0).getText())) {
+                List<String> params = extractParameterNames(ctx.arguments());
+                Node body = visit(exprChildren.get(0));
+                return new Lambda(params, body);
+            }
+            if (ctx.ID() != null) {
+                Node body = visit(exprChildren.get(0));
+                return new Lambda(List.of(ctx.ID().getText()), body);
+            }
+        }
+
+        if (isUnaryPrefix(ctx, "-")) {
+            return new UnaryOp("-", visit(ctx.pureExpr(0)));
+        }
+        if (isUnaryPrefix(ctx, "!")) {
+            return new UnaryOp("!", visit(ctx.pureExpr(0)));
+        }
+
+        if (ctx.constructor_call() != null && startsWithToken(ctx, "^")) {
+            return buildInstantiatorNode(ctx.constructor_call());
+        }
+
+        if (ctx.MATCH() != null || ctx.match_rule() != null && !ctx.match_rule().isEmpty()) {
+            Node expression = visit(ctx.pureExpr(0));
+            List<MatchRule> rules = ctx.match_rule().stream()
+                    .map(this::buildMatchRule)
+                    .collect(Collectors.toList());
+
+            return new MatchExpression(expression, rules);
+        }
+
+        if (ctx.QUESTION() != null) {
+            return new TernaryExpression(
+                    visit(ctx.pureExpr(0)),
+                    visit(ctx.pureExpr(1)),
+                    visit(ctx.pureExpr(2)));
+        }
+
+        if (isFunctionCall(ctx)) {
+            Node funcExpr = visit(ctx.pureExpr(0));
+            List<Node> args = exprChildren.stream().map(this::visit).collect(Collectors.toList());
+            return new FuncCall(funcExpr, args);
+        }
+
+        if (ctx.op != null) {
+            Node left = visit(ctx.pureExpr(0));
+            Node right = visit(ctx.pureExpr(1));
+            return new BinaryOp(ctx.op.getText(), left, right);
+        }
+
+        if (isParenthesizedPureExpr(ctx)) {
+            return visit(ctx.pureExpr(0));
+        }
+
+        if (ctx.LBRACK() != null) {
+            if (ctx.elements() != null) {
+                return new ListNode(processElements(ctx.elements()));
+            }
+            return new ListNode(Collections.emptyList());
+        }
+
+        if (ctx.INT() != null) {
+            return new Num(Double.parseDouble(ctx.INT().getText()));
+        }
+        if (ctx.FLOAT() != null) {
+            return new Num(Double.parseDouble(ctx.FLOAT().getText()));
+        }
+        if (ctx.BOOLEAN() != null) {
+            return new BooleanNode(Boolean.parseBoolean(ctx.BOOLEAN().getText()));
+        }
+        if (ctx.STRING() != null) {
+            return new StringNode(ctx.STRING().getText());
+        }
+        if (ctx.NONE() != null) {
+            return new NoneNode();
+        }
+        if (ctx.ID() != null) {
+            return new Variable(ctx.ID().getText());
+        }
+
+        throw new IllegalStateException("Unsupported pure expression: " + ctx.getText());
     }
 
     @Override
