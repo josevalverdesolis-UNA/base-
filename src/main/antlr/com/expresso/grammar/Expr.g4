@@ -58,7 +58,7 @@ expr:
         | STRING                                                # String
         | NONE                                                  # None
         | ID                                                    # Variable
-        | '(' pureExpr ')'                                  # Parens
+        | '(' expr=pureExpr ')'                                  # Parens
         | LBRACK elements? RBRACK               # Lists;
 
 // Mirrors expr but intentionally omits the Cast alternative so grouped expressions
