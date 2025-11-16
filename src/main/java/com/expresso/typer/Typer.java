@@ -326,7 +326,39 @@ public class Typer {
                 }
 
                 if (isEquality(op)) {
-                    unify(lt, rt);
+                    TypeNode appliedLeft = apply(lt);
+                    TypeNode appliedRight = apply(rt);
+
+                    if (isNumericCandidate(appliedLeft) && isNumericCandidate(appliedRight)) {
+                        resolveNumericResult(lt, rt);
+                        yield new AtomicNode("boolean");
+                    }
+
+                    if (appliedLeft instanceof TypeVar || appliedRight instanceof TypeVar) {
+                        unify(lt, rt);
+                        yield new AtomicNode("boolean");
+                    }
+
+                    if (appliedLeft instanceof TupleNode && appliedRight instanceof TupleNode) {
+                        unify(lt, rt);
+                        yield new AtomicNode("boolean");
+                    }
+
+                    if (appliedLeft instanceof ArrowNode && appliedRight instanceof ArrowNode) {
+                        unify(lt, rt);
+                        yield new AtomicNode("boolean");
+                    }
+
+                    if (isAny(appliedLeft) || isAny(appliedRight)) {
+                        yield new AtomicNode("boolean");
+                    }
+
+                    if (appliedLeft instanceof AtomicNode a && appliedRight instanceof AtomicNode b) {
+                        if (a.name().equals(b.name())) {
+                            unify(lt, rt);
+                        }
+                        yield new AtomicNode("boolean");
+                    }
                     yield new AtomicNode("boolean");
                 }
 
@@ -354,17 +386,26 @@ public class Typer {
 
             // Lambda
             case Lambda(var params, var body) -> {
-                Env local = new Env(env); // Create a new box (local environment)
+                Env local = new Env(env);
 
                 List<TypeNode> paramTypes = new ArrayList<>();
-                for (String p : params) {
-                    TypeNode t = fresh();
-                    local.define(p, t);
-                    paramTypes.add(t);
+                for (int i = 0; i < params.size(); i++) {
+                    Argument argument = params.get(i);
+                    String name = argument.name() != null ? argument.name() : ("p" + (i + 1));
+                    TypeNode type = argument.type() != null ? argument.type() : fresh();
+                    if (argument.type() != null) {
+                        assertTypeExists(type);
+                    }
+                    local.define(name, type);
+                    paramTypes.add(type);
                 }
 
                 TypeNode returnType = infer(body, local);
-                TypeNode inputType = paramTypes.size() == 1 ? paramTypes.get(0) : new TupleNode(paramTypes);
+                TypeNode inputType = switch (paramTypes.size()) {
+                    case 0 -> new TupleNode(List.of());
+                    case 1 -> paramTypes.get(0);
+                    default -> new TupleNode(paramTypes);
+                };
 
                 yield new ArrowNode(inputType, returnType);
             }
@@ -499,8 +540,13 @@ public class Typer {
 
     private TypeNode assumeLambdaSignature(Lambda lambdaExpr) {
         List<TypeNode> paramTypes = new ArrayList<>();
-        for (int i = 0; i < lambdaExpr.parameters().size(); i++) {
-            paramTypes.add(fresh());
+        for (Argument argument : lambdaExpr.parameters()) {
+            if (argument.type() != null) {
+                assertTypeExists(argument.type());
+                paramTypes.add(argument.type());
+            } else {
+                paramTypes.add(fresh());
+            }
         }
 
         TypeNode inputType = switch (paramTypes.size()) {
@@ -645,6 +691,40 @@ public class Typer {
     private boolean isAny(TypeNode t) {
         return (t instanceof AtomicNode a) && (a.name().equals("Any") || a.name().equals("any"));
     }
+  
+    private void coerceNumericOperand(TypeNode operand, String targetAtomic) {
+        TypeNode applied = apply(operand);
+        if (applied instanceof TypeVar || isAny(applied)) {
+            unify(operand, new AtomicNode(targetAtomic));
+            return;
+        }
+        if (applied instanceof AtomicNode atomic) {
+            String name = atomic.name();
+            if (name.equals(targetAtomic)) {
+                return;
+            }
+            if ("float".equals(targetAtomic) && "int".equals(name)) {
+                return;
+            }
+        }
+        throw new RuntimeException(
+                "Type mismatch: expected numeric operand of type " + targetAtomic + ", got "
+                        + typeToSurface(applied));
+    }
+
+    private boolean isNumericCandidate(TypeNode type) {
+        TypeNode applied = apply(type);
+        if (applied instanceof TypeVar) {
+            return true;
+        }
+        if (isAny(applied)) {
+            return true;
+        }
+        if (applied instanceof AtomicNode atomic) {
+            return atomic.name().equals("int") || atomic.name().equals("float");
+        }
+        return false;
+    }
 
     private boolean isOrdering(String op) {
         return Set.of("<", "<=", ">", ">=").contains(op);
@@ -666,35 +746,21 @@ public class Typer {
         TypeNode appliedLeft = apply(left);
         TypeNode appliedRight = apply(right);
 
-        boolean leftFloat = isAtomic(appliedLeft, "float");
-        boolean rightFloat = isAtomic(appliedRight, "float");
+        if (!isNumericCandidate(appliedLeft) || !isNumericCandidate(appliedRight)) {
+            throw new RuntimeException(
+                    "Type mismatch: expected numeric operands, got " + typeToSurface(appliedLeft) + " and "
+                            + typeToSurface(appliedRight));
+        }
 
-        if (leftFloat || rightFloat) {
-            unify(left, new AtomicNode("float"));
-            unify(right, new AtomicNode("float"));
+        if (isAtomic(appliedLeft, "float") || isAtomic(appliedRight, "float")) {
+            coerceNumericOperand(left, "float");
+            coerceNumericOperand(right, "float");
             return new AtomicNode("float");
         }
 
-        boolean leftInt = isAtomic(appliedLeft, "int");
-        boolean rightInt = isAtomic(appliedRight, "int");
-
-        if (leftInt || appliedLeft instanceof TypeVar || isAny(appliedLeft)) {
-            if (rightInt || appliedRight instanceof TypeVar || isAny(appliedRight)) {
-                unify(left, new AtomicNode("int"));
-                unify(right, new AtomicNode("int"));
-                return new AtomicNode("int");
-            }
-        }
-
-        if (appliedLeft instanceof TypeVar || appliedRight instanceof TypeVar) {
-            unify(left, new AtomicNode("int"));
-            unify(right, new AtomicNode("int"));
-            return new AtomicNode("int");
-        }
-
-        throw new RuntimeException(
-                "Type mismatch: expected numeric operands, got " + typeToSurface(appliedLeft) + " and "
-                        + typeToSurface(appliedRight));
+        coerceNumericOperand(left, "int");
+        coerceNumericOperand(right, "int");
+        return new AtomicNode("int");
     }
 
     private boolean isAtomic(TypeNode t, String name) {

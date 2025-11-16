@@ -543,26 +543,24 @@ public class AstTranspiler {
         return token.getType() == ExprLexer.LINECOMMENT || token.getType() == ExprLexer.BLOCKCOMMENT;
     }
 
-    private List<String> safeParamNames(List<String> params, Env env) {
-        return params.stream().reduce(
-                new ArrayList<>(), // Accumulator for safe names
-                (acc, p) -> {
-                    String newName = p;
-                    int counter = 0;
-
-                    // Keep incrementing counter until we find a unique name
-                    while (env.has(newName) || acc.contains(newName)) {
-                        counter++;
-                        newName = p + counter;
-                    }
-
-                    acc.add(newName);
-                    return acc;
-                },
-                (acc1, acc2) -> { // Combiner for parallel streams
-                    acc1.addAll(acc2);
-                    return acc1;
-                });
+    private List<String> safeParamNames(List<Argument> params, Env env) {
+        return params.stream().map(arg -> arg.name() != null ? arg.name() : "_p")
+                .reduce(
+                        new ArrayList<>(),
+                        (acc, baseName) -> {
+                            String newName = baseName;
+                            int counter = 0;
+                            while (env.has(newName) || acc.contains(newName)) {
+                                counter++;
+                                newName = baseName + counter;
+                            }
+                            acc.add(newName);
+                            return acc;
+                        },
+                        (acc1, acc2) -> {
+                            acc1.addAll(acc2);
+                            return acc1;
+                        });
     }
 
     // --------------------------------------------------------------
