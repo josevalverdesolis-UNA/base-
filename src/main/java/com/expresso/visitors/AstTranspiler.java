@@ -188,7 +188,7 @@ public class AstTranspiler {
             }
 
             // Function Call
-            case FuncCall(var funcNode, var args) -> transpileFuncCall(funcNode, args, env);
+            case FuncCall(var funcNode, var args) -> transpileFuncCall(funcNode, args, env, true);
 
             // Num
             case Num(var value) -> {
@@ -206,7 +206,14 @@ public class AstTranspiler {
             case BinaryOp(var operator, var left, var right) -> transpileBinaryOp(operator, left, right, env);
 
             // Unary Operations
-            case UnaryOp(var operator, var expr) -> operator + transpile(expr, env);
+            case UnaryOp(var operator, var expr) -> {
+                String inner = transpile(expr, env);
+                if (("-".equals(operator) || "+".equals(operator)) && needsParenthesesForUnary(inner)) {
+                    yield operator + "(" + inner + ")";
+                }
+
+                yield operator + inner;
+            }
 
             // Ternary Expression
             case TernaryExpression(var condition, var trueBranch, var falseBranch) -> {
@@ -380,7 +387,7 @@ public class AstTranspiler {
         };
     }
 
-    private String transpileFuncCall(Node funcNode, List<Node> args, Env env) {
+    private String transpileFuncCall(Node funcNode, List<Node> args, Env env, boolean allowReturnCasting) {
         String funcCode = transpile(funcNode, env);
         List<String> argList = args.stream().map(arg -> transpile(arg, env)).collect(Collectors.toList());
         String joinedArgs = String.join(", ", argList);
@@ -406,7 +413,8 @@ public class AstTranspiler {
 
                 String invocation = funcCode + "." + methodName + "(" + argsCode + ")";
 
-                if (descriptor.returnType() != null
+                if (allowReturnCasting
+                        && descriptor.returnType() != null
                         && !"Object".equals(descriptor.returnType())
                         && ("apply".equals(methodName) || "get".equals(methodName))) {
                     invocation = "((" + descriptor.returnType() + ")(" + invocation + "))";
@@ -432,7 +440,7 @@ public class AstTranspiler {
                 features.add(Feature.POW);
                 yield "pow(" + l + ", (1.0 / " + r + "))";
             }
-            default -> l + " " + operator + " " + r;
+            default -> "(" + l + ") " + operator + " (" + r + ")";
         };
     }
 
@@ -460,9 +468,10 @@ public class AstTranspiler {
                 .collect(Collectors.toList());
 
         // 2) Transpile other statements (they go inside main method)
-        List<String> transpiledStatements = otherStatements.stream()
-                .map(e -> transpile(e, globalEnv))
-                .collect(Collectors.toList());
+        List<String> transpiledStatements = new ArrayList<>();
+        for (Node stmt : otherStatements) {
+            transpiledStatements.add(transpileTopLevelStatement(stmt, globalEnv));
+        }
 
         // 3) Generate imports after features are known
         String imports = HelperLibrary.generateImports(features);
@@ -500,7 +509,21 @@ public class AstTranspiler {
         indentLevel++;
 
         // 8) Insert statements
-        for (String statement : transpiledStatements) {
+        for (String rawStatement : transpiledStatements) {
+            if (rawStatement == null)
+                continue;
+
+            String statement = rawStatement.strip();
+
+            if (statement.isEmpty())
+                continue;
+
+            if (!statement.contains("\n")) {
+                if (!statement.endsWith(";")) {
+                    statement = statement + ";";
+                }
+            }
+
             sb.append(indent()).append(statement).append("\n");
         }
 
@@ -522,6 +545,27 @@ public class AstTranspiler {
         sb.append("}\n");
 
         return sb.toString();
+    }
+
+    private String transpileTopLevelStatement(Node stmt, Env env) {
+        if (stmt == null) {
+            return null;
+        }
+
+        if (stmt instanceof FuncCall funcCall) {
+            return transpileFuncCall(funcCall.funcName(), funcCall.arguments(), env, false);
+        }
+
+        return transpile(stmt, env);
+    }
+
+    private boolean needsParenthesesForUnary(String inner) {
+        if (inner == null) {
+            return false;
+        }
+
+        String trimmed = inner.stripLeading();
+        return !trimmed.isEmpty() && (trimmed.charAt(0) == '-' || trimmed.charAt(0) == '+');
     }
 
     // --------------------------------------------------------------
