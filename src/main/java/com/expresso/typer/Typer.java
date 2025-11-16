@@ -330,7 +330,7 @@ public class Typer {
                     TypeNode appliedLeft = apply(lt);
                     TypeNode appliedRight = apply(rt);
 
-                    if (isNumericCandidate(appliedLeft) && isNumericCandidate(appliedRight)) {
+                    if (supportsNumericContext(appliedLeft) && supportsNumericContext(appliedRight)) {
                         resolveNumericResult(lt, rt);
                         yield new AtomicNode("boolean");
                     }
@@ -453,23 +453,22 @@ public class Typer {
 
             // Unary operations (!, -)
             case UnaryOp(var operator, var expr) -> {
-                return switch (operator) {
+                yield switch (operator) {
                     case "-" -> {
                         TypeNode operandType = infer(expr, env);
                         TypeNode appliedOperand = apply(operandType);
-
-                        if (!isNumericCandidate(appliedOperand)) {
+                        if (!supportsNumericContext(appliedOperand)) {
                             throw new RuntimeException(
                                     "Unary '-' expects numeric operand, got: " + typeToSurface(appliedOperand));
                         }
 
                         if (isAtomic(appliedOperand, "float")) {
-                            coerceNumericOperand(operandType, "float");
+                            enforceNumericOperand(operandType, NumericFlavor.FLOAT);
                             yield new AtomicNode("float");
                         }
 
                         if (isAtomic(appliedOperand, "int")) {
-                            coerceNumericOperand(operandType, "int");
+                            enforceNumericOperand(operandType, NumericFlavor.INT);
                             yield new AtomicNode("int");
                         }
 
@@ -748,7 +747,8 @@ public class Typer {
                         + typeToSurface(applied));
     }
 
-    private boolean isNumericCandidate(TypeNode type) {
+    private boolean supportsNumericContext(TypeNode type) {
+
         TypeNode applied = apply(type);
         if (applied instanceof TypeVar) {
             return true;
@@ -762,38 +762,44 @@ public class Typer {
         return false;
     }
 
-    private void coerceNumericOperand(TypeNode operand, String targetAtomic) {
+    private void enforceNumericOperand(TypeNode operand, NumericFlavor target) {
         TypeNode applied = apply(operand);
         if (applied instanceof TypeVar || isAny(applied)) {
-            unify(operand, new AtomicNode(targetAtomic));
+            unify(operand, target.atomicNode());
             return;
         }
         if (applied instanceof AtomicNode atomic) {
             String name = atomic.name();
-            if (name.equals(targetAtomic)) {
+
+            if (name.equals(target.atomicName())) {
                 return;
             }
-            if ("float".equals(targetAtomic) && "int".equals(name)) {
+            if (target == NumericFlavor.FLOAT && "int".equals(name)) {
                 return;
             }
         }
         throw new RuntimeException(
-                "Type mismatch: expected numeric operand of type " + targetAtomic + ", got "
+                "Type mismatch: expected numeric operand of type " + target.atomicName() + ", got "
                         + typeToSurface(applied));
     }
 
-    private boolean isNumericCandidate(TypeNode type) {
-        TypeNode applied = apply(type);
-        if (applied instanceof TypeVar) {
-            return true;
+    private enum NumericFlavor {
+        INT("int"),
+        FLOAT("float");
+
+        private final String atomicName;
+
+        NumericFlavor(String atomicName) {
+            this.atomicName = atomicName;
         }
-        if (isAny(applied)) {
-            return true;
+
+        String atomicName() {
+            return atomicName;
         }
-        if (applied instanceof AtomicNode atomic) {
-            return atomic.name().equals("int") || atomic.name().equals("float");
+
+        AtomicNode atomicNode() {
+            return new AtomicNode(atomicName);
         }
-        return false;
     }
 
     private boolean isOrdering(String op) {
@@ -816,21 +822,19 @@ public class Typer {
         TypeNode appliedLeft = apply(left);
         TypeNode appliedRight = apply(right);
 
-        if (!isNumericCandidate(appliedLeft) || !isNumericCandidate(appliedRight)) {
+        if (!supportsNumericContext(appliedLeft) || !supportsNumericContext(appliedRight)) {
             throw new RuntimeException(
                     "Type mismatch: expected numeric operands, got " + typeToSurface(appliedLeft) + " and "
                             + typeToSurface(appliedRight));
         }
 
-        if (isAtomic(appliedLeft, "float") || isAtomic(appliedRight, "float")) {
-            coerceNumericOperand(left, "float");
-            coerceNumericOperand(right, "float");
-            return new AtomicNode("float");
-        }
+        NumericFlavor flavor = (isAtomic(appliedLeft, "float") || isAtomic(appliedRight, "float"))
+                ? NumericFlavor.FLOAT
+                : NumericFlavor.INT;
 
-        coerceNumericOperand(left, "int");
-        coerceNumericOperand(right, "int");
-        return new AtomicNode("int");
+        enforceNumericOperand(left, flavor);
+        enforceNumericOperand(right, flavor);
+        return flavor.atomicNode();
     }
 
     private boolean isAtomic(TypeNode t, String name) {
