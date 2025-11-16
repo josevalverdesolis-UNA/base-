@@ -181,10 +181,10 @@ public class AstBuilder extends ExprBaseVisitor<Node> {
         return new UnaryOp("-", expression);
     }
 
-    @Override
-    public Node visitParens(ExprParser.ParensContext ctx) {
-        return visit(ctx.expr()); // Parentheses disappear in AST
-    }
+@Override
+public Node visitParens(ExprParser.ParensContext ctx) {
+    return visit(ctx.inner); // Parentheses disappear in AST
+}
 
     @Override
     public Node visitPureExpr(ExprParser.PureExprContext ctx) {
