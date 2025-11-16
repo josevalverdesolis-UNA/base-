@@ -283,7 +283,7 @@ public class AstBuilder extends ExprBaseVisitor<Node> {
         if (ctx.arguments() != null) {
             params = ctx.arguments().argument().stream().map(this::buildArgument).collect(Collectors.toList());
         }
-        TypeNode returnType = typeBuilder.visit(ctx.type());
+        TypeNode returnType = ctx.type() != null ? typeBuilder.visit(ctx.type()) : null;
         Node body = visit(ctx.expr());
 
         return new FunNode(functionName, params, returnType, body);
@@ -371,7 +371,7 @@ public class AstBuilder extends ExprBaseVisitor<Node> {
      */
     private Argument buildArgument(ExprParser.ArgumentContext ctx) {
         String name = ctx.ID() != null ? ctx.ID().getText() : null;
-        TypeNode type = typeBuilder.visit(ctx.type());
+        TypeNode type = ctx.type() != null ? typeBuilder.visit(ctx.type()) : null;
 
         return new Argument(name, type);
     }
