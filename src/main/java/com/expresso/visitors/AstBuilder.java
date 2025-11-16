@@ -236,9 +236,14 @@ public class AstBuilder extends ExprBaseVisitor<Node> {
 
     @Override
     public Lambda visitLambda(ExprParser.LambdaContext ctx) {
-        var idNode = ctx.getToken(ExprParser.ID, 0);
+        ExprParser.LambdaSimpleContext lambdaCtx = ctx.lambdaSimple();
+        if (lambdaCtx == null) {
+            throw new IllegalStateException("Lambda expression is missing its lambdaSimple context");
+        }
+
+        var idNode = lambdaCtx.ID();
         String paramName = idNode != null ? idNode.getText() : "_";
-        ExprParser.ExprContext bodyCtx = ctx.expr();
+        ExprParser.ExprContext bodyCtx = lambdaCtx.expr();
         if (bodyCtx == null) {
             throw new IllegalStateException("Lambda expression is missing a body");
         }
