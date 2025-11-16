@@ -58,8 +58,33 @@ expr:
         | STRING                                                # String
         | NONE                                                  # None
         | ID                                                    # Variable
-        | '(' expr ')'                                  # Parens
+        | '(' pureExpr ')'                                  # Parens
         | LBRACK elements? RBRACK               # Lists;
+
+pureExpr:
+
+        <assoc = right> '(' arguments? ')' ARROW expr
+        | <assoc = right> ID (COLON type)? ARROW expr
+        | '-' expr
+        | '!' expr
+        | '^' constructor_call
+        | MATCH expr WITH NEWLINE* match_rule (NEWLINE* PIPE NEWLINE* match_rule)*
+        | expr '(' (expr (',' expr)*)? ')'
+        | <assoc = right> expr op = ('**' | '!**') expr
+        | expr op = ('*' | '/') expr
+        | expr op = ('+' | '-') expr
+        | expr op = ('<' | '<=' | '>' | '>=' | '==' | '!=') expr
+        | expr op = '&&' expr
+        | expr op = '||' expr
+        | <assoc = right> expr QUESTION expr COLON expr
+        | INT
+        | FLOAT
+        | BOOLEAN
+        | STRING
+        | NONE
+        | ID
+        | '(' pureExpr ')'
+        | LBRACK elements? RBRACK;
 
 // ---------------------- Matching Rules ----------------------
 match_rule: pattern guard? ARROW expr;
