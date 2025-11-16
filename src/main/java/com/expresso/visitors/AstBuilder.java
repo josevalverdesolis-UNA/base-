@@ -9,7 +9,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.antlr.v4.runtime.ParserRuleContext;
 
 import com.expresso.ast.Argument;
 import com.expresso.ast.BinaryOp;
@@ -226,7 +225,10 @@ public class AstBuilder extends ExprBaseVisitor<Node> {
     public Lambda visitLambdaParams(ExprParser.LambdaParamsContext ctx) {
         ExprParser.LambdaParamListContext paramsCtx = ctx.getRuleContext(ExprParser.LambdaParamListContext.class, 0);
         List<String> paramNames = extractParameterNames(paramsCtx);
-        ExprParser.ExprContext bodyCtx = extractExprFrom(ctx);
+        ExprParser.ExprContext bodyCtx = ctx.expr();
+        if (bodyCtx == null) {
+            throw new IllegalStateException("Lambda parameter expression is missing a body");
+        }
         Node body = visit(bodyCtx);
 
         return new Lambda(paramNames, body);
@@ -236,7 +238,10 @@ public class AstBuilder extends ExprBaseVisitor<Node> {
     public Lambda visitLambda(ExprParser.LambdaContext ctx) {
         var idNode = ctx.getToken(ExprParser.ID, 0);
         String paramName = idNode != null ? idNode.getText() : "_";
-        ExprParser.ExprContext bodyCtx = extractExprFrom(ctx);
+        ExprParser.ExprContext bodyCtx = ctx.expr();
+        if (bodyCtx == null) {
+            throw new IllegalStateException("Lambda expression is missing a body");
+        }
         Node body = visit(bodyCtx);
 
         return new Lambda(List.of(paramName), body);
@@ -340,10 +345,6 @@ public class AstBuilder extends ExprBaseVisitor<Node> {
     private String extractParameterName(ExprParser.LambdaParamContext paramCtx) {
         var idNode = paramCtx.getToken(ExprParser.ID, 0);
         return idNode != null ? idNode.getText() : null;
-    }
-
-    private ExprParser.ExprContext extractExprFrom(ParserRuleContext ctx) {
-        return ctx.getRuleContext(ExprParser.ExprContext.class, 0);
     }
 
     // -----------------------------------------------------------------------------------
