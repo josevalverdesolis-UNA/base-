@@ -92,7 +92,7 @@ unaryExpr
     | '^' constructor_call                                      # Instantiator
     | MATCH expr WITH NEWLINE* match_rule
         (NEWLINE* PIPE NEWLINE* match_rule)*                     # Match
-    | postfixExpr
+    | postfixExpr                                                # Postfix
     ;
 
 postfixExpr
@@ -106,14 +106,14 @@ postfixPart
 
 primaryExpr
     : PRINT '(' expr ')'                                         # PrintExprValue
-    | tupleExpr
-    | groupExpr
-    | LBRACK elements? RBRACK                                    # Lists
-    | INT                                                        # Num
-    | FLOAT                                                      # Num
-    | BOOLEAN                                                    # Bool
-    | STRING                                                     # String
-    | NONE                                                       # None
+    | tupleExpr                                                  # TupleLiteral
+    | groupExpr                                                  # GroupExpr
+    | LBRACK elements? RBRACK                                    # ListLiteral
+    | INT                                                        # IntLiteral
+    | FLOAT                                                      # FloatLiteral
+    | BOOLEAN                                                    # BoolLiteral
+    | STRING                                                     # StringLiteral
+    | NONE                                                       # NoneLiteral
     | ID                                                         # Variable
     ;
 
