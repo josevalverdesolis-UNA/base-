@@ -120,7 +120,6 @@ public class AstTranspiler {
 
             // Led Statements
             case LetStatement(var name, var declaredType, var expr) -> {
-                // Special handling for InstantiatorNode - use Object type
                 String typeName;
                 TypeNode resolvedType = null;
                 if (declaredType != null) {
@@ -128,14 +127,11 @@ public class AstTranspiler {
                     env.define(name, appliedDeclared);
                     resolvedType = appliedDeclared;
                     typeName = typeNodeToJava(appliedDeclared);
-                } else if (expr instanceof InstantiatorNode) {
-                    typeName = "Object"; // Use Object for data type instances
-                    env.define(name, new AtomicNode("Any"));
                 } else {
                     TypeNode type = typer.infer(expr, env);
                     type = typer.apply(type);
                     env.define(name, type);
-                     resolvedType = type;
+                    resolvedType = type;
                     typeName = typeNodeToJava(type);
                 }
 
